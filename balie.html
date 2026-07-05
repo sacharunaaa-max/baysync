@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>BaySync · Panel BALIE</title>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:#f0f2f5;color:#222;display:flex;flex-direction:column
+}
+
+.header{background:#1a237e;color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px}
+.header .brand{font-size:17px;font-weight:700;text-align:center}
+.header .brand span{color:#7c4dff}
+.logo-hdr{height:28px;opacity:.65;flex-shrink:0}
+.logo-hdr.intergamma{height:26px}
+
+.subheader{background:#1a237e;color:#fff;padding:4px 16px 8px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-top:1px solid rgba(255,255,255,.08)}
+.subheader .lang{display:flex;gap:3px}
+.lang-btn{background:0;border:1px solid rgba(255,255,255,.3);color:rgba(255,255,255,.6);padding:3px 8px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;transition:.1s}
+.lang-btn.active{background:#fff;color:#1a237e;border-color:#fff}
+.conn-status{display:flex;align-items:center;gap:4px;font-size:12px;color:rgba(255,255,255,.65)}
+.status-dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.status-dot.online{background:#00c853;box-shadow:0 0 4px #00c853}
+.status-dot.offline{background:#ff1744}
+.status-dot.syncing{background:#ffd740;animation:pulse .8s infinite}
+@keyframes pulse{50%{opacity:.3}}
+
+.last-update{font-size:12px;color:rgba(255,255,255,.7);white-space:nowrap}
+
+.grid-wrap{flex:1;overflow-y:auto;padding:12px;display:flex;align-items:center;justify-content:center}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:500px}
+
+.door{
+  border-radius:12px;padding:16px 10px;text-align:center;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  min-height:96px;background:#fff;box-shadow:0 1px 6px rgba(0,0,0,.06);
+  border:2px solid #e0e0e0
+}
+.door .num{font-size:30px;font-weight:800;line-height:1.1}
+.door .label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+.door.libre{border-color:#00c853;background:#e8f5e9}
+.door.libre .num{color:#2e7d32}
+.door.libre .label{color:#2e7d32}
+.door.ocupado{border-color:#ff1744;background:#ffebee}
+.door.ocupado .num{color:#c62828}
+.door.ocupado .label{color:#c62828}
+.door.parcial{border-color:#ffc107;background:#fff8e1}
+.door.parcial .num{color:#f57f17}
+.door.parcial .label{color:#f57f17}
+.door.pendiente{border-color:#9e9e9e;background:#f5f5f5;opacity:.5}
+.door.pendiente .num,.door.pendiente .label{color:#757575}
+
+/* controls */
+.controls-wrap{flex-shrink:0;background:#fff}
+.controls{padding:10px 14px;display:flex;gap:8px;align-items:center}
+.btn-request{
+  flex:1;padding:14px;border:none;border-radius:10px;
+  font-size:15px;font-weight:700;letter-spacing:.3px;
+  background:#1a237e;color:#fff;cursor:pointer;transition:opacity .12s,transform .1s
+}
+.btn-request:active{opacity:.8;transform:scale(.97)}
+.btn-request:disabled{opacity:.3;cursor:default;transform:none}
+.btn-request .sub{display:block;font-size:10px;font-weight:400;opacity:.65;margin-top:1px}
+.btn-request.sent{background:#e8f5e9;color:#2e7d32}
+.btn-request.requesting{background:#ffebee;color:#c62828}
+.info-col{text-align:right;font-size:10px;color:#888;flex-shrink:0}
+.info-col div{margin-top:2px}
+
+/* footer */
+.footer{flex-shrink:0;padding:8px 14px 10px;background:#fff;border-top:1px solid #e0e0e0;display:flex;align-items:center;justify-content:center}
+.footer .credits{font-size:11px;color:#999;font-weight:500;letter-spacing:.3px;white-space:nowrap}
+
+.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none;z-index:100;white-space:nowrap}
+.toast.show{opacity:1}
+
+@media(max-width:380px){
+  .door{min-height:76px;padding:12px 6px}
+  .door .num{font-size:24px}
+  .header .brand{font-size:14px}
+  .logo-hdr{height:22px}
+  .logo-hdr.intergamma{height:20px}
+  .footer .credits{font-size:10px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <img class="logo-hdr intergamma" src="intergamma-logo.svg" alt="Intergamma">
+  <div class="brand">🚛 <span>BaySync</span> · <span id="panelLabel">Panel BALIE</span></div>
+  <img class="logo-hdr dhl" src="dhl-logo.svg" alt="DHL">
+</div>
+<div class="subheader">
+  <div class="lang">
+    <button class="lang-btn active" data-lang="es" onclick="setLang('es')">🇪🇸</button>
+    <button class="lang-btn" data-lang="en" onclick="setLang('en')">🇬🇧</button>
+    <button class="lang-btn" data-lang="nl" onclick="setLang('nl')">🇳🇱</button>
+  </div>
+  <div class="conn-status">
+    <span class="status-dot offline" id="statusDot"></span>
+    <span id="statusText">---</span>
+  </div>
+  <div class="last-update" id="updateTime">--:--</div>
+</div>
+
+<div class="grid-wrap">
+  <div class="grid" id="doorGrid"></div>
+</div>
+
+<div class="controls-wrap">
+  <div class="controls">
+    <button class="btn-request" id="btnRequest">
+      <span id="reqBtnLabel">🔔 SOLICITAR ACTUALIZACIÓN</span>
+      <span class="sub" id="reqSub">Toca para avisar al almacén</span>
+    </button>
+    <div class="info-col">
+      <div id="updateTimeLabel">🕐 --:--</div>
+      <div id="sentByLabel">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="footer">
+  <span class="credits" id="creditText">Autor: Boris Antequera</span>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const CFG = { useFirebase: false, firebaseConfig: null };
+if (typeof firebaseConfig !== 'undefined' && firebaseConfig && firebaseConfig.apiKey) {
+  CFG.useFirebase = true; CFG.firebaseConfig = firebaseConfig;
+}
+
+// ============================================================
+//  I18N
+// ============================================================
+const LANG = {
+  es: {
+    panel: 'Panel BALIE', libre: '🟢 Libre', ocupado: '🔴 Ocupado',
+    parcial: '🟡 Parcial', pendiente: '⏳ Sin datos', sinDatos: 'Sin datos',
+    reqBtn: '🔔 SOLICITAR ACTUALIZACIÓN', reqSub: 'Toca para avisar al almacén',
+    reqSubPending: '⏳ Esperando respuesta...', reqSent: 'Notificación enviada',
+    noData: '--:--', sentBy: 'Enviado por Almacén', sentByYou: 'Enviado por ti',
+    online: 'En vivo', con: 'Conectado', demo: 'Demo (local)',
+    toastReq: '📡 Notificación enviada al almacén',
+    toastResp: '✅ Almacén ha respondido',
+    toastErr: '❌ Error al enviar',
+    credit: 'Autor: Boris Antequera'
+  },
+  en: {
+    panel: 'BALIE Panel', libre: '🟢 Free', ocupado: '🔴 Occupied',
+    parcial: '🟡 Partial', pendiente: '⏳ No data', sinDatos: 'No data',
+    reqBtn: '🔔 REQUEST UPDATE', reqSub: 'Tap to notify warehouse',
+    reqSubPending: '⏳ Waiting for response...', reqSent: 'Notification sent',
+    noData: '--:--', sentBy: 'Sent by Warehouse', sentByYou: 'Sent by you',
+    online: 'Live', con: 'Connected', demo: 'Demo (local)',
+    toastReq: '📡 Notification sent to warehouse',
+    toastResp: '✅ Warehouse has responded',
+    toastErr: '❌ Error sending',
+    credit: 'Author: Boris Antequera'
+  },
+  nl: {
+    panel: 'BALIE Paneel', libre: '🟢 Vrij', ocupado: '🔴 Bezet',
+    parcial: '🟡 Gedeeltelijk', pendiente: '⏳ Geen gegevens', sinDatos: 'Geen gegevens',
+    reqBtn: '🔔 UPDATE AANVRAGEN', reqSub: 'Tik om magazijn te waarschuwen',
+    reqSubPending: '⏳ Wachten op antwoord...', reqSent: 'Melding verzonden',
+    noData: '--:--', sentBy: 'Verzonden door Magazijn', sentByYou: 'Verzonden door jou',
+    online: 'Live', con: 'Verbonden', demo: 'Demo (lokaal)',
+    toastReq: '📡 Melding naar het magazijn verzonden',
+    toastResp: '✅ Magazijn heeft gereageerd',
+    toastErr: '❌ Fout bij verzenden',
+    credit: 'Auteur: Boris Antequera'
+  }
+};
+let currentLang = 'es';
+
+function setLang(l){
+  currentLang=l;
+  document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===l));
+  applyLangUI();
+}
+function t(key){ return LANG[currentLang][key]||key; }
+function applyLangUI(){
+  document.getElementById('panelLabel').textContent = t('panel');
+  document.getElementById('reqBtnLabel').textContent = t('reqBtn');
+  const btn=document.getElementById('btnRequest');
+  btn.disabled=false;
+  btn.className='btn-request';
+  document.getElementById('reqSub').textContent = t('reqSub');
+  renderGrid();
+}
+
+// ============================================================
+//  STATE
+// ============================================================
+const DOORS = [18,19,20,21,22,23,24,25,26];
+const STORAGE_KEY = 'baysync_shared';
+let doorsState = {};
+let lastUpdateTime = null;
+let requestPending = false;
+
+function initDoors(){ const o={}; DOORS.forEach(d=>{o[d]='pendiente'}); return o; }
+
+// ============================================================
+//  UI
+// ============================================================
+function renderGrid() {
+  const grid = document.getElementById('doorGrid');
+  grid.innerHTML = '';
+  DOORS.forEach(d => {
+    const el = document.createElement('div');
+    const st = doorsState[d] || 'pendiente';
+    el.className = 'door ' + st;
+    const lbl = st==='pendiente' ? t('pendiente') : t(st);
+    el.innerHTML = `<div class="num">${d}</div><div class="label">${lbl}</div>`;
+    grid.appendChild(el);
+  });
+}
+
+function setStatus(mode, txt){ document.getElementById('statusDot').className='status-dot '+mode; document.getElementById('statusText').textContent=txt; }
+
+function applyDoorsData(data){
+  if(!data||!data.doors) return;
+  doorsState = {...data.doors};
+  if(data.sentAt){
+    const d=new Date(data.sentAt);
+    lastUpdateTime=d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }
+  document.getElementById('updateTimeLabel').textContent='🕐 '+(lastUpdateTime||t('noData'));
+  document.getElementById('sentByLabel').textContent=t('sentBy');
+  if(requestPending){ requestPending=false; updateRequestBtn(false); showToast(t('toastResp')); }
+  renderGrid();
+}
+
+function showToast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),2500);
+}
+
+// ============================================================
+//  REQUEST
+// ============================================================
+async function sendRequest(){
+  if(requestPending) return;
+  requestPending=true; updateRequestBtn(true);
+  if(CFG.useFirebase){
+    try{
+      await firebase.database().ref('pedido').set({activo:true,timestamp:Date.now(),solicitante:'Bo'});
+      showToast(t('toastReq'));
+    }catch(e){ requestPending=false; updateRequestBtn(false); showToast(t('toastErr')); }
+  } else {
+    localStorage.setItem('baysync_request',JSON.stringify({activo:true,timestamp:Date.now()}));
+    if(bc) bc.postMessage({type:'request'});
+    showToast(t('toastReq'));
+    setTimeout(()=>{if(requestPending){requestPending=false;updateRequestBtn(false)}},10000);
+  }
+}
+
+function updateRequestBtn(pending){
+  const btn=document.getElementById('btnRequest');
+  const sub=document.getElementById('reqSub');
+  if(pending){ btn.className='btn-request requesting'; btn.disabled=true; sub.textContent=t('reqSubPending'); }
+  else { btn.className='btn-request'; btn.disabled=false; sub.textContent=t('reqSub'); }
+}
+
+// ============================================================
+//  FIREBASE
+// ============================================================
+function initFirebase(){
+  if(!CFG.useFirebase) return;
+  try{
+    firebase.initializeApp(CFG.firebaseConfig);
+    firebase.database().ref('muelles').on('value',snap=>{
+      const v=snap.val();
+      if(v){ applyDoorsData(v); setStatus('online',t('online')); if(requestPending){requestPending=false; updateRequestBtn(false);} }
+    });
+    firebase.database().ref('pedido').on('value',snap=>{
+      const v=snap.val();
+      if(v&&v.activo===false&&requestPending){ requestPending=false; updateRequestBtn(false); showToast(t('toastResp')); }
+    });
+    setStatus('online',t('con'));
+  }catch(e){ CFG.useFirebase=false; initLocalListeners(); }
+}
+
+// ============================================================
+//  LOCAL
+// ============================================================
+let bc=null; try{bc=new BroadcastChannel('baysync')}catch(e){}
+let lastSentMs=0;
+
+function initLocalListeners(){
+  try{ const s=localStorage.getItem(STORAGE_KEY); if(s) applyDoorsData(JSON.parse(s)); }catch(e){}
+  if(bc) bc.onmessage=e=>{ if(e.data.type==='doors') applyDoorsData(e.data.data); };
+  setInterval(()=>{
+    try{
+      const s=localStorage.getItem(STORAGE_KEY);
+      if(s){ const d=JSON.parse(s); if(d.sentAt&&d.sentAt>lastSentMs){ applyDoorsData(d); lastSentMs=d.sentAt; } }
+    }catch(e){}
+  },2000);
+  setStatus('online',t('demo'));
+}
+
+setInterval(()=>{
+  try{ const r=localStorage.getItem('baysync_request'); if(r){ const j=JSON.parse(r); if(j&&j.activo===true&&j.timestamp&&Date.now()-j.timestamp>10000) localStorage.setItem('baysync_request',JSON.stringify({activo:false,timestamp:0})); } }catch(e){}
+},5000);
+
+// ============================================================
+//  INIT
+// ============================================================
+doorsState = initDoors(); renderGrid();
+
+if(CFG.useFirebase) initFirebase(); else initLocalListeners();
+
+document.getElementById('btnRequest').addEventListener('click',sendRequest);
+
+window.addEventListener('online',()=>{setStatus('online',CFG.useFirebase?t('con'):t('demo'));});
+window.addEventListener('offline',()=>{setStatus('offline','Sin conexión');});
+</script>
+</body>
+</html>
