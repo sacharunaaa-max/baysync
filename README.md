@@ -1,67 +1,35 @@
 # 🚛 BaySync
 
-**App de estado de muelles de carga en tiempo real.**
-El almacén marca qué puertas están libres/ocupadas y Bo lo ve al instante desde BALIE.
+Control de muelles de carga en tiempo real.
 
-## 📱 Dos URLs, un mismo sistema
+**App almacén:** `index.html` — El del almacén marca el estado de las puertas y envía.  
+**Panel BALIE:** `balie.html` — Tú ves el estado en tiempo real y puedes solicitar actualización.
 
-| URL | Quién la usa | Qué hace |
-|---|---|---|
-| `index.html` | 👷 Persona en almacén | Toca puertas → marca libre/ocupado → ENVIAR |
-| `balie.html` | 👨‍💻 Bo (BALIE) | Ve estado en vivo + SOLICITAR actualización |
+## 🌐 En vivo
 
-## 🌐 Idiomas
+- **App almacén:** https://sacharunaaa-max.github.io/baysync/
+- **Panel BALIE:** https://sacharunaaa-max.github.io/baysync/balie.html
 
-🇪🇸 Español · 🇬🇧 English · 🇳🇱 Nederlands
-Selector de idioma en el header de ambas apps.
+## 🧠 Cómo funciona
 
-## 📋 Características
+Ambas apps se conectan a la misma base de datos en tiempo real (Firebase Realtime Database vía REST API).
 
-- 9 puertas (18–26) en grid 3×3
-- Cada puerta: 🟢 Libre · 🔴 Ocupado · 🟡 Parcial
-- Tiempo real con Firebase (o demo local con BroadcastChannel)
-- Botón ENVIAR con timestamp del último envío
-- Botón SOLICITAR → suena + vibra en móvil del almacén
-- Auto-sync cada 60s
-- Funciona offline (cola de cambios)
-- Selector de idioma (ES/EN/NL)
-- Logos DHL + Intergamma + créditos
+1. El almacén abre `index.html`, toca las puertas (🟢 Libre → 🔴 Ocupado → 🟡 Parcial), pulsa **ENVIAR**.
+2. El panel BALIE se actualiza solo al instante.
+3. Tú puedes tocar **SOLICITAR** y al almacén le salta un aviso sonoro + visual.
 
-## 🔧 Sin Firebase (demo local)
+## 🛠️ Para desarrollo local
 
-Abre **`index.html`** y **`balie.html`** en el mismo navegador (pestañas distintas).
-Funciona con localStorage + BroadcastChannel. Ideal para probar.
+Las apps funcionan directamente desde GitHub Pages. No necesitas instalar nada.
 
-## ☁️ Con Firebase (producción cruzada)
+## 📦 Archivos
 
-Para que funcione entre dispositivos diferentes (móvil del almacén ↔ tu PC):
+| Archivo | Descripción |
+|---|---|
+| `index.html` | App del almacén |
+| `balie.html` | Panel BALIE |
+| `dhl-logo.svg` | Logo DHL |
+| `intergamma-logo.svg` | Logo Intergamma |
+| `mockup.svg` | Diseño conceptual |
 
-1. Ve a [console.firebase.google.com](https://console.firebase.google.com)
-2. Crea proyecto → Activa **Realtime Database**
-3. Reglas → pon en modo test:
-   ```json
-   { "rules": { ".read": true, ".write": true } }
-   ```
-4. Agrega app web → copia la config
-5. Pega en `firebase-config.js`
-6. Sube a GitHub Pages
-
-## 🚀 GitHub Pages
-
-```bash
-git init
-git add .
-git commit -m "BaySync v1"
-git remote add origin https://github.com/tu-usuario/baysync.git
-git push -u origin main
-```
-
-Repo → Settings → Pages → Source: main branch, root folder.
-
-## 📐 Puertas
-
-Muelles 18, 19, 20, 21, 22, 23, 24, 25, 26.
-
----
-
-*Creado por Boris Antequera*
+**Autor: Boris Antequera**

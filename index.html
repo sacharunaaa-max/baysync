@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>BaySync · Almacén</title>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
@@ -127,12 +126,9 @@ body{
 
 <script>
 // ============================================================
-//  CONFIG
+//  CONFIG — Base de datos en tiempo real (Firebase REST)
 // ============================================================
-const CFG = { useFirebase: false, firebaseConfig: null };
-if (typeof firebaseConfig !== 'undefined' && firebaseConfig && firebaseConfig.apiKey) {
-  CFG.useFirebase = true; CFG.firebaseConfig = firebaseConfig;
-}
+const DB_URL = 'https://baysync-583a2-default-rtdb.europe-west1.firebasedatabase.app';
 
 // ============================================================
 //  I18N
@@ -235,9 +231,11 @@ function setStatus(mode, txt){ document.getElementById('statusDot').className='s
 async function sendState() {
   setStatus('syncing', t('syncing'));
   const payload = { doors:{...doorsState}, sentAt:Date.now() };
-  if (CFG.useFirebase) {
-    try { await firebase.database().ref('muelles').set(payload); }
-    catch(e){
+  if (navigator.onLine) {
+    try {
+      await fetch(DB_URL + '/muelles.json', { method: 'PUT', body: JSON.stringify(payload) });
+      await fetch(DB_URL + '/pedido.json', { method: 'PUT', body: JSON.stringify({activo:false,timestamp:0}) });
+    } catch(e) {
       localStorage.setItem(STORAGE_KEY+'_shared', JSON.stringify(payload));
       broadcastState(payload);
     }
@@ -246,9 +244,6 @@ async function sendState() {
     broadcastState(payload);
   }
   localRequest = false; clearRequestBanner();
-  if (CFG.useFirebase) {
-    try { await firebase.database().ref('pedido').set({activo:false,timestamp:0}); } catch(e){}
-  }
   dirty = false; lastSent = new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
   saveState(); updateUI(); setStatus('online', t('sent'));
 }
@@ -353,30 +348,67 @@ document.addEventListener('click', onFirstInteraction, { once: true });
 document.addEventListener('touchstart', onFirstInteraction, { once: true });
 
 // ============================================================
-//  FIREBASE
+//  SINCRONIZACIÓN EN TIEMPO REAL (Firebase REST API)
 // ============================================================
-function initFirebase(){
-  if(!CFG.useFirebase)return;
-  try{
-    firebase.initializeApp(CFG.firebaseConfig);
-    firebase.database().ref('pedido').on('value',snap=>{const r=snap.val(); if(r&&r.activo===true) onRequestDetected();});
-    firebase.database().ref('muelles').on('value',snap=>{
-      const v=snap.val();
-      if(v&&v.doors&&!dirty){ doorsState=v.doors; saveState(); renderGrid(); updateLastSent(v); updateUI(); }
-    });
-    setStatus('online','Conectado');
-  }catch(e){CFG.useFirebase=false;initLocalListeners();}
-}
-function updateLastSent(v){ if(v.sentAt) lastSent=new Date(v.sentAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+let localSource = null;
 
-function initLocalListeners(){
+function updateLastSent(v){ if(v&&v.sentAt) lastSent=new Date(v.sentAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
+
+function initSync() {
+  // Escuchar cambios de estado (cuando BALIE envía actualización)
+  listenForUpdates();
+
+  // Escuchar solicitudes de Bo (pedido.activo === true)
+  listenForRequests();
+
+  // Si hay cambios locales sin enviar, enviar cada 30s
+  setInterval(()=>{ if(dirty) sendState(); }, 30000);
+
+  // Escuchar BroadcastChannel como fallback local
   if(bc) bc.onmessage=e=>{
     if(e.data.type==='request') onRequestDetected();
-    if(e.data.type==='doors'&&e.data.data&&e.data.data.doors&&!dirty){ doorsState=e.data.data.doors; saveState(); renderGrid(); updateLastSent(e.data.data); updateUI(); }
+    if(e.data.type==='doors'&&e.data.data&&e.data.data.doors&&!dirty){
+      doorsState=e.data.data.doors; saveState(); renderGrid(); updateLastSent(e.data.data); updateUI();
+    }
   };
-  setStatus('online','Demo (local)');
+  setStatus('online', 'Conectado');
 }
-setInterval(()=>{if(dirty)sendState()},60000);
+
+function listenForUpdates() {
+  // EventSource escucha cambios en /muelles.json vía SSE
+  try {
+    localSource = new EventSource(DB_URL + '/muelles.json');
+    localSource.onmessage = (e) => {
+      try {
+        const v = JSON.parse(e.data);
+        if (v && v.doors && !dirty) {
+          doorsState = v.doors; saveState(); renderGrid(); updateLastSent(v); updateUI();
+        }
+      } catch(ex) {}
+    };
+    localSource.onerror = () => {
+      // Reintentar conexión después de 3s
+      setTimeout(() => { localSource && localSource.close(); listenForUpdates(); }, 3000);
+    };
+  } catch(e) {}
+}
+
+function listenForRequests() {
+  // Polling cada 2s para detectar solicitud activa
+  let lastReqActive = false;
+  setInterval(async () => {
+    try {
+      const resp = await fetch(DB_URL + '/pedido.json');
+      const r = await resp.json();
+      if (r && r.activo === true) {
+        if (!lastReqActive) onRequestDetected();
+        lastReqActive = true;
+      } else {
+        lastReqActive = false;
+      }
+    } catch(e) {}
+  }, 2000);
+}
 
 // ============================================================
 //  INIT
@@ -386,9 +418,9 @@ document.getElementById('btnSend').addEventListener('click',sendState);
 document.getElementById('reqBannerText').textContent = LANG[currentLang].reqBanner;
 document.getElementById('offlineText').textContent = LANG[currentLang].offline;
 
-if(CFG.useFirebase) initFirebase(); else initLocalListeners();
+initSync();
 
-window.addEventListener('online',()=>{document.getElementById('offlineBar').classList.remove('show');setStatus('online',CFG.useFirebase?'Conectado':'Demo (local)');});
+window.addEventListener('online',()=>{document.getElementById('offlineBar').classList.remove('show');setStatus('online','Conectado');});
 window.addEventListener('offline',()=>{document.getElementById('offlineBar').classList.add('show');setStatus('offline','Sin conexión');});
 if(!navigator.onLine) document.getElementById('offlineBar').classList.add('show');
 </script>

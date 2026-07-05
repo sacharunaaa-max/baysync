@@ -4,8 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>BaySync · Panel BALIE</title>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%}
@@ -135,12 +134,9 @@ body{
 
 <script>
 // ============================================================
-//  CONFIG
+//  CONFIG — Base de datos en tiempo real (Firebase REST)
 // ============================================================
-const CFG = { useFirebase: false, firebaseConfig: null };
-if (typeof firebaseConfig !== 'undefined' && firebaseConfig && firebaseConfig.apiKey) {
-  CFG.useFirebase = true; CFG.firebaseConfig = firebaseConfig;
-}
+const DB_URL = 'https://baysync-583a2-default-rtdb.europe-west1.firebasedatabase.app';
 
 // ============================================================
 //  I18N
@@ -255,16 +251,14 @@ function showToast(msg){
 async function sendRequest(){
   if(requestPending) return;
   requestPending=true; updateRequestBtn(true);
-  if(CFG.useFirebase){
-    try{
-      await firebase.database().ref('pedido').set({activo:true,timestamp:Date.now(),solicitante:'Bo'});
-      showToast(t('toastReq'));
-    }catch(e){ requestPending=false; updateRequestBtn(false); showToast(t('toastErr')); }
-  } else {
-    localStorage.setItem('baysync_request',JSON.stringify({activo:true,timestamp:Date.now()}));
-    if(bc) bc.postMessage({type:'request'});
+  try {
+    await fetch(DB_URL + '/pedido.json', {
+      method: 'PUT',
+      body: JSON.stringify({activo:true, timestamp:Date.now(), solicitante:'Bo'})
+    });
     showToast(t('toastReq'));
-    setTimeout(()=>{if(requestPending){requestPending=false;updateRequestBtn(false)}},10000);
+  } catch(e) {
+    requestPending=false; updateRequestBtn(false); showToast(t('toastErr'));
   }
 }
 
@@ -276,56 +270,71 @@ function updateRequestBtn(pending){
 }
 
 // ============================================================
-//  FIREBASE
-// ============================================================
-function initFirebase(){
-  if(!CFG.useFirebase) return;
-  try{
-    firebase.initializeApp(CFG.firebaseConfig);
-    firebase.database().ref('muelles').on('value',snap=>{
-      const v=snap.val();
-      if(v){ applyDoorsData(v); setStatus('online',t('online')); if(requestPending){requestPending=false; updateRequestBtn(false);} }
-    });
-    firebase.database().ref('pedido').on('value',snap=>{
-      const v=snap.val();
-      if(v&&v.activo===false&&requestPending){ requestPending=false; updateRequestBtn(false); showToast(t('toastResp')); }
-    });
-    setStatus('online',t('con'));
-  }catch(e){ CFG.useFirebase=false; initLocalListeners(); }
-}
-
-// ============================================================
-//  LOCAL
+//  SINCRONIZACIÓN EN TIEMPO REAL (Firebase REST API)
 // ============================================================
 let bc=null; try{bc=new BroadcastChannel('baysync')}catch(e){}
-let lastSentMs=0;
+let localSource = null;
 
-function initLocalListeners(){
-  try{ const s=localStorage.getItem(STORAGE_KEY); if(s) applyDoorsData(JSON.parse(s)); }catch(e){}
+function initSync() {
+  // Escuchar estado de muelles en tiempo real (SSE)
+  listenForDoors();
+
+  // Escuchar confirmación de envío (pedido.activo === false)
+  listenForAck();
+
+  // BroadcastChannel como fallback local
   if(bc) bc.onmessage=e=>{ if(e.data.type==='doors') applyDoorsData(e.data.data); };
-  setInterval(()=>{
-    try{
-      const s=localStorage.getItem(STORAGE_KEY);
-      if(s){ const d=JSON.parse(s); if(d.sentAt&&d.sentAt>lastSentMs){ applyDoorsData(d); lastSentMs=d.sentAt; } }
-    }catch(e){}
-  },2000);
-  setStatus('online',t('demo'));
+
+  setStatus('online', t('con'));
 }
 
-setInterval(()=>{
-  try{ const r=localStorage.getItem('baysync_request'); if(r){ const j=JSON.parse(r); if(j&&j.activo===true&&j.timestamp&&Date.now()-j.timestamp>10000) localStorage.setItem('baysync_request',JSON.stringify({activo:false,timestamp:0})); } }catch(e){}
-},5000);
+function listenForDoors() {
+  try {
+    localSource = new EventSource(DB_URL + '/muelles.json');
+    localSource.onmessage = (e) => {
+      try {
+        const v = JSON.parse(e.data);
+        if (v) {
+          applyDoorsData(v);
+          setStatus('online', t('online'));
+          if (requestPending) { requestPending=false; updateRequestBtn(false); }
+        }
+      } catch(ex) {}
+    };
+    localSource.onerror = () => {
+      setTimeout(() => { localSource && localSource.close(); listenForDoors(); }, 3000);
+    };
+  } catch(e) {}
+}
+
+function listenForAck() {
+  // Si envió solicitud, esperar a que el almacén responda (pedido.activo === false)
+  let lastAck = false;
+  setInterval(async () => {
+    if (!requestPending) return;
+    try {
+      const resp = await fetch(DB_URL + '/pedido.json');
+      const r = await resp.json();
+      if (r && r.activo === false && !lastAck) {
+        lastAck = true;
+        requestPending = false;
+        updateRequestBtn(false);
+        showToast(t('toastResp'));
+      } else if (r && r.activo === true) {
+        lastAck = false;
+      }
+    } catch(e) {}
+  }, 2000);
+}
 
 // ============================================================
 //  INIT
 // ============================================================
 doorsState = initDoors(); renderGrid();
-
-if(CFG.useFirebase) initFirebase(); else initLocalListeners();
-
+initSync();
 document.getElementById('btnRequest').addEventListener('click',sendRequest);
 
-window.addEventListener('online',()=>{setStatus('online',CFG.useFirebase?t('con'):t('demo'));});
+window.addEventListener('online',()=>{setStatus('online',t('con'));});
 window.addEventListener('offline',()=>{setStatus('offline','Sin conexión');});
 </script>
 </body>
