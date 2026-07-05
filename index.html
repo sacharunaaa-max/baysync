@@ -380,7 +380,9 @@ function listenForUpdates() {
     localSource = new EventSource(DB_URL + '/muelles.json');
     localSource.onmessage = (e) => {
       try {
-        const v = JSON.parse(e.data);
+        // Firebase SSE devuelve { path: '/', data: { ... } }
+        const raw = JSON.parse(e.data);
+        const v = raw && raw.data ? raw.data : raw;
         if (v && v.doors && !dirty) {
           doorsState = v.doors; saveState(); renderGrid(); updateLastSent(v); updateUI();
         }

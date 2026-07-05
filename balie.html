@@ -57,27 +57,14 @@ body{
 .door.pendiente .num,.door.pendiente .label{color:#757575}
 
 /* controls */
-.controls-wrap{flex-shrink:0;background:#fff}
-.controls{padding:10px 14px;display:flex;gap:8px;align-items:center}
-.btn-request{
-  flex:1;padding:14px;border:none;border-radius:10px;
-  font-size:15px;font-weight:700;letter-spacing:.3px;
-  background:#1a237e;color:#fff;cursor:pointer;transition:opacity .12s,transform .1s
-}
-.btn-request:active{opacity:.8;transform:scale(.97)}
-.btn-request:disabled{opacity:.3;cursor:default;transform:none}
-.btn-request .sub{display:block;font-size:10px;font-weight:400;opacity:.65;margin-top:1px}
-.btn-request.sent{background:#e8f5e9;color:#2e7d32}
-.btn-request.requesting{background:#ffebee;color:#c62828}
-.info-col{text-align:right;font-size:10px;color:#888;flex-shrink:0}
-.info-col div{margin-top:2px}
+.info-bar{flex-shrink:0;background:#fff;border-top:1px solid #e0e0e0;padding:10px 16px;display:flex;align-items:center;justify-content:space-between}
+.info-bar .update-col{font-size:12px;color:#555}
+.info-bar .update-col .time{font-weight:600;color:#333}
+.info-bar .update-col .by{font-size:11px;color:#999;margin-top:2px}
 
 /* footer */
 .footer{flex-shrink:0;padding:8px 14px 10px;background:#fff;border-top:1px solid #e0e0e0;display:flex;align-items:center;justify-content:center}
 .footer .credits{font-size:11px;color:#999;font-weight:500;letter-spacing:.3px;white-space:nowrap}
-
-.toast{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none;z-index:100;white-space:nowrap}
-.toast.show{opacity:1}
 
 @media(max-width:380px){
   .door{min-height:76px;padding:12px 6px}
@@ -113,24 +100,16 @@ body{
   <div class="grid" id="doorGrid"></div>
 </div>
 
-<div class="controls-wrap">
-  <div class="controls">
-    <button class="btn-request" id="btnRequest">
-      <span id="reqBtnLabel">🔔 SOLICITAR ACTUALIZACIÓN</span>
-      <span class="sub" id="reqSub">Toca para avisar al almacén</span>
-    </button>
-    <div class="info-col">
-      <div id="updateTimeLabel">🕐 --:--</div>
-      <div id="sentByLabel">—</div>
-    </div>
+<div class="info-bar">
+  <div class="update-col">
+    <div class="time" id="updateTimeLabel">🕐 --:--</div>
+    <div class="by" id="sentByLabel">—</div>
   </div>
 </div>
 
 <div class="footer">
   <span class="credits" id="creditText">Autor: Boris Antequera</span>
 </div>
-
-<div class="toast" id="toast"></div>
 
 <script>
 // ============================================================
@@ -145,37 +124,22 @@ const LANG = {
   es: {
     panel: 'Panel BALIE', libre: '🟢 Libre', ocupado: '🔴 Ocupado',
     parcial: '🟡 Parcial', pendiente: '⏳ Sin datos', sinDatos: 'Sin datos',
-    reqBtn: '🔔 SOLICITAR ACTUALIZACIÓN', reqSub: 'Toca para avisar al almacén',
-    reqSubPending: '⏳ Esperando respuesta...', reqSent: 'Notificación enviada',
-    noData: '--:--', sentBy: 'Enviado por Almacén', sentByYou: 'Enviado por ti',
-    online: 'En vivo', con: 'Conectado', demo: 'Demo (local)',
-    toastReq: '📡 Notificación enviada al almacén',
-    toastResp: '✅ Almacén ha respondido',
-    toastErr: '❌ Error al enviar',
+    noData: '--:--', sentBy: 'Enviado por Almacén',
+    online: 'En vivo', con: 'Conectado',
     credit: 'Autor: Boris Antequera'
   },
   en: {
     panel: 'BALIE Panel', libre: '🟢 Free', ocupado: '🔴 Occupied',
     parcial: '🟡 Partial', pendiente: '⏳ No data', sinDatos: 'No data',
-    reqBtn: '🔔 REQUEST UPDATE', reqSub: 'Tap to notify warehouse',
-    reqSubPending: '⏳ Waiting for response...', reqSent: 'Notification sent',
-    noData: '--:--', sentBy: 'Sent by Warehouse', sentByYou: 'Sent by you',
-    online: 'Live', con: 'Connected', demo: 'Demo (local)',
-    toastReq: '📡 Notification sent to warehouse',
-    toastResp: '✅ Warehouse has responded',
-    toastErr: '❌ Error sending',
+    noData: '--:--', sentBy: 'Sent by Warehouse',
+    online: 'Live', con: 'Connected',
     credit: 'Author: Boris Antequera'
   },
   nl: {
     panel: 'BALIE Paneel', libre: '🟢 Vrij', ocupado: '🔴 Bezet',
     parcial: '🟡 Gedeeltelijk', pendiente: '⏳ Geen gegevens', sinDatos: 'Geen gegevens',
-    reqBtn: '🔔 UPDATE AANVRAGEN', reqSub: 'Tik om magazijn te waarschuwen',
-    reqSubPending: '⏳ Wachten op antwoord...', reqSent: 'Melding verzonden',
-    noData: '--:--', sentBy: 'Verzonden door Magazijn', sentByYou: 'Verzonden door jou',
-    online: 'Live', con: 'Verbonden', demo: 'Demo (lokaal)',
-    toastReq: '📡 Melding naar het magazijn verzonden',
-    toastResp: '✅ Magazijn heeft gereageerd',
-    toastErr: '❌ Fout bij verzenden',
+    noData: '--:--', sentBy: 'Verzonden door Magazijn',
+    online: 'Live', con: 'Verbonden',
     credit: 'Auteur: Boris Antequera'
   }
 };
@@ -184,27 +148,17 @@ let currentLang = 'es';
 function setLang(l){
   currentLang=l;
   document.querySelectorAll('.lang-btn').forEach(b=>b.classList.toggle('active',b.dataset.lang===l));
-  applyLangUI();
-}
-function t(key){ return LANG[currentLang][key]||key; }
-function applyLangUI(){
   document.getElementById('panelLabel').textContent = t('panel');
-  document.getElementById('reqBtnLabel').textContent = t('reqBtn');
-  const btn=document.getElementById('btnRequest');
-  btn.disabled=false;
-  btn.className='btn-request';
-  document.getElementById('reqSub').textContent = t('reqSub');
   renderGrid();
 }
+function t(key){ return LANG[currentLang][key]||key; }
 
 // ============================================================
 //  STATE
 // ============================================================
 const DOORS = [18,19,20,21,22,23,24,25,26];
-const STORAGE_KEY = 'baysync_shared';
 let doorsState = {};
 let lastUpdateTime = null;
-let requestPending = false;
 
 function initDoors(){ const o={}; DOORS.forEach(d=>{o[d]='pendiente'}); return o; }
 
@@ -235,56 +189,18 @@ function applyDoorsData(data){
   }
   document.getElementById('updateTimeLabel').textContent='🕐 '+(lastUpdateTime||t('noData'));
   document.getElementById('sentByLabel').textContent=t('sentBy');
-  if(requestPending){ requestPending=false; updateRequestBtn(false); showToast(t('toastResp')); }
   renderGrid();
 }
 
-function showToast(msg){
-  const t=document.getElementById('toast');
-  t.textContent=msg; t.classList.add('show');
-  setTimeout(()=>t.classList.remove('show'),2500);
-}
-
 // ============================================================
-//  REQUEST
-// ============================================================
-async function sendRequest(){
-  if(requestPending) return;
-  requestPending=true; updateRequestBtn(true);
-  try {
-    await fetch(DB_URL + '/pedido.json', {
-      method: 'PUT',
-      body: JSON.stringify({activo:true, timestamp:Date.now(), solicitante:'Bo'})
-    });
-    showToast(t('toastReq'));
-  } catch(e) {
-    requestPending=false; updateRequestBtn(false); showToast(t('toastErr'));
-  }
-}
-
-function updateRequestBtn(pending){
-  const btn=document.getElementById('btnRequest');
-  const sub=document.getElementById('reqSub');
-  if(pending){ btn.className='btn-request requesting'; btn.disabled=true; sub.textContent=t('reqSubPending'); }
-  else { btn.className='btn-request'; btn.disabled=false; sub.textContent=t('reqSub'); }
-}
-
-// ============================================================
-//  SINCRONIZACIÓN EN TIEMPO REAL (Firebase REST API)
+//  SINCRONIZACIÓN (Firebase REST API)
 // ============================================================
 let bc=null; try{bc=new BroadcastChannel('baysync')}catch(e){}
 let localSource = null;
 
 function initSync() {
-  // Escuchar estado de muelles en tiempo real (SSE)
   listenForDoors();
-
-  // Escuchar confirmación de envío (pedido.activo === false)
-  listenForAck();
-
-  // BroadcastChannel como fallback local
   if(bc) bc.onmessage=e=>{ if(e.data.type==='doors') applyDoorsData(e.data.data); };
-
   setStatus('online', t('con'));
 }
 
@@ -293,11 +209,11 @@ function listenForDoors() {
     localSource = new EventSource(DB_URL + '/muelles.json');
     localSource.onmessage = (e) => {
       try {
-        const v = JSON.parse(e.data);
-        if (v) {
+        const raw = JSON.parse(e.data);
+        const v = raw && raw.data ? raw.data : raw;
+        if (v && v.doors) {
           applyDoorsData(v);
           setStatus('online', t('online'));
-          if (requestPending) { requestPending=false; updateRequestBtn(false); }
         }
       } catch(ex) {}
     };
@@ -307,32 +223,11 @@ function listenForDoors() {
   } catch(e) {}
 }
 
-function listenForAck() {
-  // Si envió solicitud, esperar a que el almacén responda (pedido.activo === false)
-  let lastAck = false;
-  setInterval(async () => {
-    if (!requestPending) return;
-    try {
-      const resp = await fetch(DB_URL + '/pedido.json');
-      const r = await resp.json();
-      if (r && r.activo === false && !lastAck) {
-        lastAck = true;
-        requestPending = false;
-        updateRequestBtn(false);
-        showToast(t('toastResp'));
-      } else if (r && r.activo === true) {
-        lastAck = false;
-      }
-    } catch(e) {}
-  }, 2000);
-}
-
 // ============================================================
 //  INIT
 // ============================================================
 doorsState = initDoors(); renderGrid();
 initSync();
-document.getElementById('btnRequest').addEventListener('click',sendRequest);
 
 window.addEventListener('online',()=>{setStatus('online',t('con'));});
 window.addEventListener('offline',()=>{setStatus('offline','Sin conexión');});
