@@ -207,8 +207,9 @@ function initSync() {
 function listenForDoors() {
   try {
     localSource = new EventSource(DB_URL + '/muelles.json');
-    localSource.onmessage = (e) => {
+    localSource.addEventListener('put', (e) => {
       try {
+        // Firebase SSE events tienen event:'put' y data: {path, data}
         const raw = JSON.parse(e.data);
         const v = raw && raw.data ? raw.data : raw;
         if (v && v.doors) {
@@ -216,7 +217,7 @@ function listenForDoors() {
           setStatus('online', t('online'));
         }
       } catch(ex) {}
-    };
+    });
     localSource.onerror = () => {
       setTimeout(() => { localSource && localSource.close(); listenForDoors(); }, 3000);
     };

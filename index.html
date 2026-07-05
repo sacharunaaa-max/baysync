@@ -378,16 +378,16 @@ function listenForUpdates() {
   // EventSource escucha cambios en /muelles.json vía SSE
   try {
     localSource = new EventSource(DB_URL + '/muelles.json');
-    localSource.onmessage = (e) => {
+    localSource.addEventListener('put', (e) => {
       try {
-        // Firebase SSE devuelve { path: '/', data: { ... } }
+        // Firebase SSE events tienen event:'put' y data contiene {path, data}
         const raw = JSON.parse(e.data);
         const v = raw && raw.data ? raw.data : raw;
         if (v && v.doors && !dirty) {
           doorsState = v.doors; saveState(); renderGrid(); updateLastSent(v); updateUI();
         }
       } catch(ex) {}
-    };
+    });
     localSource.onerror = () => {
       // Reintentar conexión después de 3s
       setTimeout(() => { localSource && localSource.close(); listenForUpdates(); }, 3000);
