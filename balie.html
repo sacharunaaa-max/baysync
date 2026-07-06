@@ -103,7 +103,7 @@ body{
 <div class="info-bar">
   <div class="update-col">
     <div class="time" id="updateTimeLabel">🕐 --:--</div>
-    <div class="by" id="sentByLabel">—</div>
+    <div class="by" id="sentByLabel">-</div>
   </div>
 </div>
 
@@ -113,7 +113,7 @@ body{
 
 <script>
 // ============================================================
-//  CONFIG — Base de datos en tiempo real (Firebase REST)
+//  CONFIG - Base de datos en tiempo real (Firebase REST)
 // ============================================================
 const DB_URL = 'https://baysync-583a2-default-rtdb.europe-west1.firebasedatabase.app';
 
@@ -196,32 +196,30 @@ function applyDoorsData(data){
 //  SINCRONIZACIÓN (Firebase REST API)
 // ============================================================
 let bc=null; try{bc=new BroadcastChannel('baysync')}catch(e){}
-let localSource = null;
+let pollTimer = null;
 
 function initSync() {
-  listenForDoors();
+  // Polling cada 3s en vez de EventSource para evitar bloqueos de red corporativa
+  pollForDoors();
   if(bc) bc.onmessage=e=>{ if(e.data.type==='doors') applyDoorsData(e.data.data); };
   setStatus('online', t('con'));
 }
 
-function listenForDoors() {
+async function pollForDoors() {
+  // Lectura inmediata al arrancar
   try {
-    localSource = new EventSource(DB_URL + '/muelles.json');
-    localSource.addEventListener('put', (e) => {
-      try {
-        // Firebase SSE events tienen event:'put' y data: {path, data}
-        const raw = JSON.parse(e.data);
-        const v = raw && raw.data ? raw.data : raw;
-        if (v && v.doors) {
-          applyDoorsData(v);
-          setStatus('online', t('online'));
-        }
-      } catch(ex) {}
-    });
-    localSource.onerror = () => {
-      setTimeout(() => { localSource && localSource.close(); listenForDoors(); }, 3000);
-    };
-  } catch(e) {}
+    const resp = await fetch(DB_URL + '/muelles.json');
+    const data = await resp.json();
+    if (data && data.doors) { applyDoorsData(data); setStatus('online', t('online')); }
+  } catch(e) { setStatus('offline', 'Sin conexión'); }
+  // Y repetir cada 3 segundos
+  pollTimer = setInterval(async () => {
+    try {
+      const resp = await fetch(DB_URL + '/muelles.json');
+      const data = await resp.json();
+      if (data && data.doors) { applyDoorsData(data); setStatus('online', t('online')); }
+    } catch(e) {}
+  }, 3000);
 }
 
 // ============================================================

@@ -350,8 +350,6 @@ document.addEventListener('touchstart', onFirstInteraction, { once: true });
 // ============================================================
 //  SINCRONIZACIÓN EN TIEMPO REAL (Firebase REST API)
 // ============================================================
-let localSource = null;
-
 function updateLastSent(v){ if(v&&v.sentAt) lastSent=new Date(v.sentAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}); }
 
 function initSync() {
@@ -375,24 +373,16 @@ function initSync() {
 }
 
 function listenForUpdates() {
-  // EventSource escucha cambios en /muelles.json vía SSE
-  try {
-    localSource = new EventSource(DB_URL + '/muelles.json');
-    localSource.addEventListener('put', (e) => {
-      try {
-        // Firebase SSE events tienen event:'put' y data contiene {path, data}
-        const raw = JSON.parse(e.data);
-        const v = raw && raw.data ? raw.data : raw;
-        if (v && v.doors && !dirty) {
-          doorsState = v.doors; saveState(); renderGrid(); updateLastSent(v); updateUI();
-        }
-      } catch(ex) {}
-    });
-    localSource.onerror = () => {
-      // Reintentar conexión después de 3s
-      setTimeout(() => { localSource && localSource.close(); listenForUpdates(); }, 3000);
-    };
-  } catch(e) {}
+  // Polling cada 3s en vez de EventSource para evitar bloqueos de red corporativa
+  setInterval(async () => {
+    try {
+      const resp = await fetch(DB_URL + '/muelles.json');
+      const v = await resp.json();
+      if (v && v.doors && !dirty) {
+        doorsState = v.doors; saveState(); renderGrid(); updateLastSent(v); updateUI();
+      }
+    } catch(e) {}
+  }, 3000);
 }
 
 function listenForRequests() {
